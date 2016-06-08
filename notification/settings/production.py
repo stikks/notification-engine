@@ -1,9 +1,7 @@
+__author__ = 'stikks'
 import dj_database_url
 
-try:
-    from .local_settings import *
-except ImportError:
-    pass
+from .local import *
 
 DEBUG = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

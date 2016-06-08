@@ -14,9 +14,9 @@ from rest_framework.reverse import reverse
 from rest_framework.decorators import api_view, permission_classes
 
 # import application modules
-from .serializers import ClientApplicationSerializer, PushMessageSerializer
-from .models import ClientApplication, PushMessage
-from notification.settings import HTTP_POST_URL
+from .serializers import ClientApplicationSerializer, PushMessageSerializer, UserSerializer
+from .models import ClientApplication, PushMessage, User
+from notification.settings.local import HTTP_POST_URL
 
 
 class JSONResponse(HttpResponse):
@@ -33,7 +33,6 @@ class JSONResponse(HttpResponse):
 def api_root(request, format=None):
     return Response({
         'applications': reverse('app-list', request=request, format=format)
-        # 'application-detail': reverse('app-detail', request=request, format=format)
     })
 
 
@@ -53,6 +52,93 @@ class ClientApplicationDetail(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.AllowAny]
 
 
+class UserList(views.APIView):
+    """ API Endpoint for listing all user accounts or creating a new account
+    """
+
+    def get(self, request, format=None):
+        """
+        Retrieve a list of all user accounts
+        :type format: basestring
+        :type request: request data
+        """
+        users = User.objects.all()
+        users_serializer = UserSerializer(users, many=True)
+        return Response(users_serializer.data)
+
+    def post(self, request, format=None):
+        """
+        Create a new user account for a mobile application user from request information
+        :type format: basestring
+        :type request: request data
+        """
+
+        application_name = request.data.get('name')
+
+        if not application_name:
+            return Response({"message": "mobile application name missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            application = ClientApplication.objects.filter(name__iexact=application_name).first()
+        except ClientApplication.DoesNotExist:
+            return Response({"message": "mobile application not registered. "
+                                        "Connect to the appropriate api endpoint to register application."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data
+        data['application_id'] = application.id
+
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserDetail(views.APIView):
+    """ API Endpoint for retrieving, updating or deleting a user account
+    """
+
+    def get_object(self, pk):
+        try:
+            return User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"message": "user account not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def get(self, request, pk, format=None):
+        """
+        Retrieve a user account
+        :type format: basestring
+        :type pk: integer
+        :type request: request data
+        """
+        user = self.get_object(pk=pk)
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+
+    def put(self, request, pk, format=None):
+        """
+        Update a user account
+        :type format: basestring
+        :type pk: integer
+        :type request: request data
+        """
+        user = self.get_object(pk=pk)
+        serializer = UserSerializer(user, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk,format=None):
+        """
+        Delete a user account
+        """
+        user = self.get_object(pk=pk)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class SendDownstreamHTTP(views.APIView):
     """
     Send downstream messages from app server to client app
@@ -64,9 +150,6 @@ class SendDownstreamHTTP(views.APIView):
         """
         Send downstream message via HTTP
         """
-        api_key = request.data.get('api_key')
-        if not api_key:
-            return Response({"message": "GOOGLE API KEY Missing"}, status=status.HTTP_206_PARTIAL_CONTENT)
 
         application_name = request.data.get('name')
 
@@ -74,7 +157,7 @@ class SendDownstreamHTTP(views.APIView):
             return Response({"message": "application name missing"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            application = ClientApplication.objects.get(name=application_name)
+            application = ClientApplication.objects.filter(name__iexact=application_name).first()
         except ClientApplication.DoesNotExist:
             return Response({"message": "application not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -82,75 +165,15 @@ class SendDownstreamHTTP(views.APIView):
         data['target'] = application.registration_id
 
         serializer = PushMessageSerializer(data=data)
+
         if serializer.is_valid():
             serializer.save()
-            headers = {'Content-type': 'application/json', "Authorization": "key='%s'" % api_key}
+            headers = {'Content-type': 'application/json', "Authorization": "key='%s'" % application.secret_key}
             response = requests.post(url=HTTP_POST_URL, headers=headers, data=serializer.data)
             print 'response', response
             return Response(response.content, status=response.status_code)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-# class UserList(views.APIView):
-#     """ API Endpoint for listing all user accounts or creating a new account
-#     """
-#
-#     def get(self, request, format=None):
-#         """
-#         Retrieve a list of all user accounts
-#         """
-#         users = User.objects.all()
-#         users_serializer = UserSerializer(users, many=True)
-#         return Response(users_serializer.data)
-#
-#     def post(self, request, format=None):
-#         """
-#         Create a new user account from request information
-#         """
-#         serializer = UserSerializer(data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-#
-#
-# class UserDetail(views.APIView):
-#     """ API Endpoint for retrieving, updating or deleting a user account
-#     """
-#
-#     def get_object(self, pk):
-#         try:
-#             return User.objects.get(pk=pk)
-#         except User.DoesNotExist:
-#             return Http404(status=status.HTTP_404_NOT_FOUND)
-#
-#     def get(self, request, pk, format=None):
-#         """
-#         Retrieve a user account
-#         """
-#         user = self.get_object(pk=pk)
-#         serializer = UserSerializer(user)
-#         return Response(serializer.data)
-#
-#     def put(self, request, pk, format=None):
-#         """
-#         Update a user account
-#         """
-#         user = self.get_object(pk=pk)
-#         serializer = UserSerializer(user, data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data)
-#         else:
-#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-#
-#     def delete(self, request, pk,format=None):
-#         """
-#         Delete a user account
-#         """
-#         user = self.get_object(pk=pk)
-#         user.delete()
-#         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # class UserList(mixins.CreateModelMixin, mixins.ListModelMixin, generics.GenericAPIView):

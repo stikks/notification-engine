@@ -52,8 +52,16 @@ class ClientApplication(AbstractClass):
     Model class to handle registered users
     """
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=50, blank=False, null=False)
-    registration_id = models.TextField(blank=False, null=False)
+    name = models.TextField(max_length=50, blank=False)
+    server_key = models.CharField(blank=False, max_length=255)
+
+
+class User(AbstractClass):
+    """ Instance of client application
+    """
+    id = models.AutoField(primary_key=True)
+    registration_id = models.TextField(blank=False)
+    client_application = models.ForeignKey(ClientApplication)
 
 
 class PushMessage(AbstractClass):
@@ -61,9 +69,11 @@ class PushMessage(AbstractClass):
     Model class to handle push notifications
     """
     id = models.AutoField(primary_key=True)
+    registration_id = models.TextField(blank=False)
     target = models.TextField(blank=False)
-    notification = JSONField(blank=True, null=True)
-    body = JSONField(blank=True, null=True)
-    time_to_live = models.BigIntegerField(blank=True, null=True)
+    notification = JSONField(blank=True)
+    body = JSONField(blank=True)
+    time_to_live = models.BigIntegerField(blank=True)
     priority = models.CharField(default="normal", max_length=6)
     delay_while_idle = models.BooleanField(default=True)
+    application = models.ForeignKey(ClientApplication)
