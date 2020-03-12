@@ -1,10 +1,10 @@
 # Simple REST API endpoints for managing push notifications
 
 ## Requirements
-python2.7
-linux OS
-virtualenv
-mysql5.6
+* python2.7
+* linux OS
+* virtualenv
+* mysql5.6
 
 ## To setup project
 * create mysql database, ensuring db name and credentials match value in `notification/settings.py`
